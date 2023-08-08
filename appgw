@@ -1,0 +1,221 @@
+// App Gateway Config //
+param location string
+param applicationGatewayName string
+param tier string
+param skuSize string
+param capacity int = 2
+param managedIdentity string
+param autoScaleMaxCapacity int
+// Gateway IP Configuration //
+param gatewayIpConfigName string = 'appGatewayIpConfig'
+param gatewayVirtualNetworkName string
+param gatewaySubnetName string
+//Frontend IP Configuration //
+param frontendIpConfigName string = 'appGwPublicFrontendIpIPv4'
+param publicIPRefParam string
+param frontendPortNumber int = 443
+param privateFrontendIpConfigName string = 'appGwPrivateFrontendIpIPv4'
+param frontendVirtualNetworkName string
+param frontendSubnetName string
+param frontendPrivateIpAddress array = []
+// Backend Configuration //
+param backendFqdn string = 'agwv2.azurewebsites.net'
+param backendPoolName string = 'backendpool01'
+param backendHttpSettingsCollectionName string = 'backendsettings01'
+param backendPort int = 443
+param backendHttpSettingsProtocol string = 'Https'
+param backendHttpSettingsCookieBasedAffinity string = 'Disabled'
+param backendHttpSettingsRequestTimeout int = 20
+// Listeners Configuration //
+param listenerName string = 'listener01'
+param listenerProtocol string = 'Https'
+param sslCertificateId string = 'agwlabs'
+param requestRoutingRuleName string = 'routingrule01'
+param ruleType string = 'Basic'
+param rulePriority int = 10
+param firewallPolicyName string = 'wafpolicy01'
+param listenervaultCert string
+// WAF Policy Params //
+param wafPolicyName string
+param policyLocation string
+param policyMode string = 'Detection'
+param policyState string = 'Enabled'
+param fileUploadLimitInMb int = 100
+param requestBodyCheck bool = true
+param maxRequestBodySizeInKb int = 128
+param ruleSetType1 string = 'OWASP'
+param ruleSetVersion1 string = '3.2'
+param ruleSetType2 string = 'Microsoft_BotManagerRuleSet'
+param ruleSetVersion2 string = '0.1'
+
+
+resource applicationGateway 'Microsoft.Network/applicationGateways@2023-02-01' = {
+  name: applicationGatewayName
+  location: location
+  tags: {}
+ // zones: zones //Not Required for ASE//
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity}': {}
+    }
+  }
+  properties: {
+    sku: {
+      name: skuSize
+      tier: tier
+    }
+    gatewayIPConfigurations: [
+      {
+        name: gatewayIpConfigName
+        properties: {
+          subnet: {
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', gatewayVirtualNetworkName, gatewaySubnetName)
+          }
+        }
+      }
+    ]
+    frontendIPConfigurations: [
+      {
+        name: frontendIpConfigName
+        properties: {
+          publicIPAddress: {
+            id: resourceId('Microsoft.Network/publicIPAddresses', publicIPRefParam)
+          }
+        }
+        
+      }
+      {
+        name: privateFrontendIpConfigName
+        properties: {
+          subnet: {
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', frontendVirtualNetworkName, frontendSubnetName)
+          }
+          privateIPAddress: frontendPrivateIpAddress[0]
+          privateIPAllocationMethod: 'Static'
+        }
+      }
+    ]
+       frontendPorts: [
+      {
+        name: 'port_${frontendPortNumber}'
+        properties: {
+          port: frontendPortNumber
+        }
+      }
+    ]
+    backendAddressPools: [
+      {
+        name: backendPoolName
+        properties: {
+          backendAddresses: [
+            {
+              fqdn: backendFqdn
+            }
+          ]
+        }
+      }
+    ]
+    backendHttpSettingsCollection: [
+      {
+        name: backendHttpSettingsCollectionName
+        properties: {
+          port: backendPort
+          protocol: backendHttpSettingsProtocol
+          cookieBasedAffinity: backendHttpSettingsCookieBasedAffinity
+          requestTimeout: backendHttpSettingsRequestTimeout
+        }
+      }
+    ]
+    backendSettingsCollection: []
+    httpListeners: [
+      {
+        name: listenerName
+        properties: {
+          frontendIPConfiguration: {
+            id: privateFrontendIpConfigName
+          }
+          frontendPort: {
+            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', applicationGatewayName, 'port_${frontendPortNumber}')
+          }
+          protocol: listenerProtocol
+          sslCertificate: {
+            id: sslCertificateId
+          }
+        }
+      }
+    ]
+    listeners: []
+    requestRoutingRules: [
+      {
+        name: requestRoutingRuleName
+        properties: {
+          ruleType: ruleType
+          httpListener: {
+            id: listenerName
+          }
+          priority: rulePriority
+          backendAddressPool: {
+            id: backendPoolName
+          }
+          backendHttpSettings: {
+            id: backendHttpSettingsCollectionName
+          }
+        }
+      }
+    ]
+    routingRules: []
+    enableHttp2: true
+    sslCertificates: [
+      {
+        name: sslCertificateId
+        properties: {
+          keyVaultSecretId: listenervaultCert
+        }
+      }
+    ]
+    probes: []
+    autoscaleConfiguration: {
+      minCapacity: capacity
+      maxCapacity: autoScaleMaxCapacity
+    }
+    firewallPolicy: {
+      id: resourceId('Microsoft.Network/applicationGatewayWebApplicationFirewallPolicies', firewallPolicyName)
+    }
+    
+  }
+  dependsOn: [
+    wafpolicy01
+  ]
+}
+
+resource wafpolicy01 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies@2023-02-01' = {
+  name: wafPolicyName
+  location: policyLocation
+  tags: {}
+  properties: {
+    policySettings: {
+      mode: policyMode
+      state: policyState
+      fileUploadLimitInMb: fileUploadLimitInMb
+      requestBodyCheck: requestBodyCheck
+      maxRequestBodySizeInKb: maxRequestBodySizeInKb
+    }
+    managedRules: {
+      exclusions: []
+      managedRuleSets: [
+        {
+          ruleSetType: ruleSetType1
+          ruleSetVersion: ruleSetVersion1
+          ruleGroupOverrides: null
+        }
+        {
+          ruleSetType: ruleSetType2
+          ruleSetVersion: ruleSetVersion2
+          ruleGroupOverrides: null
+        }
+      ]
+    }
+    customRules: []
+  }
+}
