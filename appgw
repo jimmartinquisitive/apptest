@@ -133,14 +133,14 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-02-01' =
         name: listenerName
         properties: {
           frontendIPConfiguration: {
-            id: privateFrontendIpConfigName
+            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', applicationGatewayName, privateFrontendIpConfigName)
           }
           frontendPort: {
             id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', applicationGatewayName, 'port_${frontendPortNumber}')
           }
           protocol: listenerProtocol
           sslCertificate: {
-            id: sslCertificateId
+            id: resourceId('Microsoft.Network/applicationGateways/sslCertificates', applicationGatewayName, sslCertificateId)
           }
         }
       }
@@ -152,18 +152,19 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-02-01' =
         properties: {
           ruleType: ruleType
           httpListener: {
-            id: listenerName
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', applicationGatewayName, listenerName)
           }
           priority: rulePriority
           backendAddressPool: {
-            id: backendPoolName
+            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', applicationGatewayName, backendPoolName)
           }
           backendHttpSettings: {
-            id: backendHttpSettingsCollectionName
+            id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', applicationGatewayName, backendHttpSettingsCollectionName)
           }
         }
       }
     ]
+    
     routingRules: []
     enableHttp2: true
     sslCertificates: [
